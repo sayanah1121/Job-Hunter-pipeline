@@ -1,5 +1,7 @@
 requests
 pandas
-anthropic
 openpyxl
 python-dotenv
+google-genai
+groq
+openai
