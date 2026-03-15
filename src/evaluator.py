@@ -13,21 +13,17 @@ if not ANTHROPIC_API_KEY:
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-# Candidate profile directly integrated for the AI's matching engine
+# Up-to-date candidate profile for the AI's matching engine
 CANDIDATE_PROFILE = """
 Candidate Name: Sayan Sarkar
-Role: Data Engineer / Software Engineer
-Experience: 0-1 Years (8 months at Bitwise Solutions)
-Key Technologies: Apache Airflow, PySpark, Docker, PostgreSQL, Python, SQL, C++, Kafka.
-Cloud & Data Stack: Google Cloud Platform (GCP), Azure (ADLS, Azure Data Factory, Azure Databricks, Event Hub).
-Core Competencies: ETL Optimization, Metadata-driven Pipelines, Incremental Data Loading (Backfilling), Slowly Changing Dimensions (SCD Type 1 & 2).
+Role: Data Engineer
+Experience: 0-1 Years (Trainee Data Engineer at Bitwise Solutions)
+Key Technologies: Azure Data Factory (ADF), ADLS Gen2, Azure Databricks, Snowflake, GCP, Apache Spark / PySpark, Apache Kafka, Apache Airflow, Python, SQL, Docker, GitHub Actions, dbt, Ab Initio GDE.
+Core Competencies: ETL/ELT Pipelines, Real-Time Streaming, SQL Performance Tuning, Data Quality Automation, Root Cause Analysis.
 Key Projects & Experience:
-1. Bitwise Solutions: Optimized SQL queries reducing batch execution by 30%. Handled functional analysis and root-cause triage in Ab Initio GDE environments.
-2. Cloud Data Engineering: Metadata-driven pipelines on Azure using ADF, Databricks, and Event Hub with complex SCD implementations.
-3. FinTech Nexus Pipeline: Scalable fan-out/fan-in architecture using Airflow, PySpark, and Docker.
-4. Livekart Real-Time Streaming Engine: Fault-tolerant streaming using Kafka, Zookeeper, and Spark Streaming.
-5. distributed-payment-engine: Secure, asynchronous transaction processing.
-6. BookMySeat: High-concurrency booking engine design.
+1. Bitwise Solutions: Reduced daily batch pipeline execution time by 30% via SQL query optimization and TWS schedule fine-tuning. Built automated duplicate record detection and conducted root-cause analysis of transformation failures.
+2. LiveKart Real-Time Streaming Engine: Fault-tolerant event streaming platform using Apache Kafka, Zookeeper, and Spark Streaming for high-velocity e-commerce data. Containerized with Docker.
+3. Automated AI Job Hunter Pipeline: End-to-End ETL pipeline extracting jobs via Serper API, evaluating with Claude Haiku, and orchestrating via Airflow and GitHub Actions.
 """
 
 def evaluate_job(job_snippet, job_title):
@@ -40,12 +36,13 @@ def evaluate_job(job_snippet, job_title):
     Task:
     1. Read the provided Job Title and Description Snippet.
     2. VALIDITY: If the snippet is just an aggregate list (e.g., "100+ Jobs on LinkedIn"), mark is_valid as false.
-    3. EXPERIENCE FILTER & CATEGORIZATION: The candidate is looking for roles up to 1-2 years of experience.
+    3. TIME CHECK: If the snippet explicitly mentions the job is older than 1 week (e.g., "30+ days ago", "3 years ago", "months ago"), mark is_valid as false.
+    4. EXPERIENCE FILTER & CATEGORIZATION: The candidate is looking for roles up to 1-2 years of experience.
        - If the job explicitly requires a MINIMUM of 2+ years (e.g., "2-4 years", "3+ years"), it is a FAIL (mark is_valid as false).
        - Categorize the experience into EXACTLY one of these strings for the experience_bracket: "0 to 1 yrs", "0 to 2 yrs", "1 to 2 yrs", or "Unknown".
        - If no exact years are mentioned but keywords like "fresher", "entry level" are present, OR if experience isn't specified at all, categorize as "Unknown".
-    4. Calculate resume_match_score (0-100) based on alignment with the candidate's Azure, Bitwise, and system design background.
-    5. Extract matched_skills and missing_skills.
+    5. Calculate resume_match_score (0-100) based on alignment with the candidate's Azure, Kafka, Spark, and Bitwise background.
+    6. Extract matched_skills and missing_skills.
     
     Respond strictly in JSON format. Do not include markdown tags.
     
@@ -129,7 +126,6 @@ def save_to_excel(jobs_list, filename):
             else:
                 sheet_data = pd.DataFrame()
             
-            # If no jobs match this bracket today, create an empty sheet with headers anyway
             if sheet_data.empty:
                 empty_df = pd.DataFrame(columns=["job_title", "company_name", "location", "experience_bracket", "resume_match_score", "matched_skills", "missing_skills", "application_link"])
                 empty_df.to_excel(writer, sheet_name=bracket, index=False)
@@ -138,13 +134,3 @@ def save_to_excel(jobs_list, filename):
                 
     print(f"\nSuccess! Excel report saved to {filepath}")
     return filepath
-
-if __name__ == "__main__":
-    from extractor import extract_raw_jobs
-    
-    print("Initiating Pipeline: Phase 1 & 2 Testing\n" + "="*40)
-    test_roles = ["Junior Data Engineer", "Azure Data Engineer", "Data Engineer Trainee"]
-    raw_data = extract_raw_jobs(target_roles=test_roles, pages_per_role=1)
-    
-    final_jobs = process_and_filter_jobs(raw_data)
-    save_to_excel(final_jobs, "Daily_Data_Engineering_Jobs.xlsx")
