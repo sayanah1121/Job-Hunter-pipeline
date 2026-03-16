@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GITHUB_AI_TOKEN = os.getenv("GITHUB_AI_TOKEN")
+GITHUB_AI_TOKEN = os.getenv("GH_MODELS_API_KEY")
 if not GITHUB_AI_TOKEN:
     raise ValueError("CRITICAL ERROR: GITHUB_AI_TOKEN not found.")
 
