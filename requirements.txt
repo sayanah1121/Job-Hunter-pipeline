@@ -6,3 +6,5 @@ google-genai
 groq
 openai
 apify-client
+mistralai
+together

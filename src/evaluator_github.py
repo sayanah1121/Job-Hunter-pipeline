@@ -1,7 +1,27 @@
+"""
+evaluator_github.py
+────────────────────
+Stage-2b evaluator using GitHub Models (GPT-4o-mini via Azure inference endpoint).
+
+WHY GPT-4o-MINI HERE:
+  • Free with a GitHub account (5k requests/day, no credit card).
+  • GPT-4o-mini follows JSON schemas very reliably — almost zero malformed
+    responses in practice.
+  • Used as a parallel Stage-2 evaluator alongside Groq, so the final shortlist
+    has been independently validated by two different model families.
+  • After deduplication, jobs confirmed by both Groq AND GitHub are flagged
+    with multiple evaluators — a strong signal for the candidate to prioritise.
+
+SETUP:
+  Add to .env:  GH_MODELS_API_KEY=<your GitHub Personal Access Token>
+  The PAT needs no special scopes — just "public repositories" is sufficient.
+"""
+
 import os
 import json
 from openai import OpenAI
 from dotenv import load_dotenv
+from src.candidate_profile import FULL_SYSTEM_PROMPT
 
 load_dotenv()
 
@@ -11,104 +31,41 @@ if not GITHUB_AI_TOKEN:
 
 client = OpenAI(
     base_url="https://models.inference.ai.azure.com",
-    api_key=GITHUB_AI_TOKEN
+    api_key=GITHUB_AI_TOKEN,
 )
 
-CANDIDATE_PROFILE = """
-Candidate Name: Sayan Sarkar
-Current Role: Trainee Data Engineer at Bitwise Solutions (BFSI domain, ~8 months experience)
-Target Roles: Data Engineer, Junior Data Engineer, Associate Data Engineer, ETL Developer, Azure Data Engineer, PySpark Developer
-
-=== TECHNICAL STACK ===
-Cloud & Storage    : Azure Data Factory (ADF), ADLS Gen2, Azure Databricks, Snowflake, GCP
-Streaming          : Apache Kafka, Apache Zookeeper, Spark Streaming
-Batch/Orchestration: Apache Airflow, Apache Spark / PySpark, dbt, Ab Initio GDE
-DevOps & Infra     : Docker, GitHub Actions, Git
-Languages          : Python (strong), SQL (strong)
-Databases          : PostgreSQL
-
-=== PROJECTS ===
-1. Bitwise Solutions (Production BFSI ETL): SQL optimisation, duplicate detection, TWS scheduling.
-2. LiveKart (Portfolio): Kafka + Spark Streaming real-time e-commerce pipeline, Dockerized.
-3. AI Job Hunter Pipeline (Portfolio): Serper API → Claude Haiku → Airflow + GitHub Actions.
-
-=== EXPERIENCE LEVEL ===
-0–1 year. Suitable for 0–2 year roles. HARD REJECT if minimum requirement is 2+ years stated explicitly.
-"""
-
-SYSTEM_PROMPT = f"""
-You are a precise Technical Recruiter AI evaluating job listings for a specific Data Engineer candidate.
-Your evaluations directly affect which jobs the candidate applies to — accuracy is critical.
-
-{CANDIDATE_PROFILE}
-
-=== EVALUATION RULES ===
-
-STEP 1 — VALIDITY CHECK (mark is_valid: false if ANY condition is true):
-  a) Snippet is an aggregate/category page (e.g. "100+ jobs on LinkedIn").
-  b) Job was posted MORE than 7 days ago. Signals: "30+ days ago", "1 month ago", "2 weeks ago".
-     NOTE: "1 week ago", "5 days ago", "today", "3 days ago" are VALID.
-  c) Job EXPLICITLY requires MINIMUM 2 or more years (e.g. "minimum 2 years", "3-5 years required").
-     NOTE: Ranges like "0-2 years", "1-2 years" are VALID.
-
-STEP 2 — EXPERIENCE BRACKET (assign EXACTLY one):
-  "0 to 1 yrs"  → fresher/entry-level/trainee or 0-1 year stated
-  "0 to 2 yrs"  → 0-2 years or 1-2 years range
-  "1 to 2 yrs"  → explicitly 1-2 years minimum
-  "Unknown"     → no experience requirement mentioned
-
-STEP 3 — RESUME MATCH SCORE (0–100 integer):
-  SCORING RUBRIC (add points):
-  +20 if core stack matches (Spark/PySpark, Kafka, Airflow, ADF, ADLS)
-  +15 if SQL / Python explicitly required
-  +15 if cloud platform matches (Azure preferred, GCP acceptable)
-  +10 if BFSI/banking/fintech domain mentioned
-  +10 if ETL/ELT pipeline design is the core requirement
-  +10 if streaming/real-time experience required (Kafka, Spark Streaming)
-  +10 if orchestration tools match (Airflow, ADF pipelines)
-  +5  if containerisation / DevOps mentioned (Docker, GitHub Actions)
-  +5  if data modelling / dbt / warehousing mentioned
-
-  DEDUCTIONS:
-  -20 if requires technologies candidate has zero exposure to (Hadoop, Hive, Scala, Java-only roles)
-  -15 if role is primarily Data Analyst, Data Scientist, or BI (not engineering)
-  -10 if requires 5+ years even if stated as "preferred"
-
-  Final score must be between 0 and 100.
-
-STEP 4 — SKILL EXTRACTION:
-  matched_skills: Comma-separated skills from the job that the candidate HAS (max 8).
-  missing_skills: Comma-separated skills from the job that the candidate LACKS (max 8).
-
-=== OUTPUT FORMAT ===
-Return ONLY a valid JSON object. No markdown. No explanation.
-
-Schema:
-{{
-    "is_valid": boolean,
-    "invalid_reason": "string or empty string if valid",
-    "experience_bracket": "string",
-    "resume_match_score": integer,
-    "matched_skills": "string",
-    "missing_skills": "string"
-}}
-"""
+GITHUB_MODEL = "gpt-4o-mini"
 
 
 def evaluate_job_github(job_snippet: str, job_title: str) -> dict | None:
+    """
+    Parallel Stage-2 evaluator.
+    GPT-4o-mini is reliable on the strict JSON schema and rarely hallucinates
+    experience brackets or skill labels.
+    Returns parsed JSON dict or None on error.
+    """
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=GITHUB_MODEL,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user",   "content": f"Job Title: {job_title}\nJob Description Snippet:\n{job_snippet}"}
+                {"role": "system", "content": FULL_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"Job Title: {job_title}\nJob Description Snippet:\n{job_snippet}",
+                },
             ],
             temperature=0.0,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
         )
 
-        raw_text = response.choices[0].message.content
-        return json.loads(raw_text)
+        raw_text = response.choices[0].message.content.strip()
+
+        # Defensive extraction
+        start = raw_text.find("{")
+        end   = raw_text.rfind("}")
+        if start != -1 and end != -1:
+            return json.loads(raw_text[start : end + 1])
+        return None
 
     except Exception as e:
         print(f"  [GITHUB] -> Evaluation Error for '{job_title}': {e}")
@@ -116,8 +73,12 @@ def evaluate_job_github(job_snippet: str, job_title: str) -> dict | None:
 
 
 def process_with_github(raw_jobs_list: list[dict]) -> list[dict]:
+    """
+    Runs GPT-4o-mini evaluation over provided raw job listings.
+    Designed to run in parallel with Groq in the main pipeline thread.
+    """
     qualified_jobs = []
-    print(f"\n[GITHUB] Evaluating {len(raw_jobs_list)} raw jobs...")
+    print(f"\n[GITHUB] Evaluating {len(raw_jobs_list)} raw jobs with {GITHUB_MODEL}...")
 
     for job in raw_jobs_list:
         title    = job.get("title",    "Unknown Title")
@@ -137,16 +98,17 @@ def process_with_github(raw_jobs_list: list[dict]) -> list[dict]:
 
         if not evaluation.get("is_valid"):
             reason = evaluation.get("invalid_reason", "")
-            print(f"  [SKIP]  {title} | Reason: {reason or 'failed validity check'}")
+            print(f"  [SKIP]  {title} | {reason or 'failed validity check'}")
             continue
 
         score   = evaluation.get("resume_match_score", 0)
         bracket = evaluation.get("experience_bracket", "Unknown")
 
         if score >= 60:
-            print(f"  [GITHUB MATCH] {title} @ {company} | Bracket: {bracket} | Score: {score}")
+            print(f"  [GITHUB ✓] {title} @ {company} | {bracket} | Score: {score}")
             qualified_jobs.append({
                 "source":             source,
+                "evaluator":          "GitHub",
                 "job_title":          title,
                 "company_name":       company,
                 "location":           location,
@@ -157,7 +119,7 @@ def process_with_github(raw_jobs_list: list[dict]) -> list[dict]:
                 "application_link":   link,
             })
         else:
-            print(f"  [LOW]   {title} @ {company} | Score: {score} (below 60, skipping)")
+            print(f"  [LOW]   {title} @ {company} | Score: {score}")
 
-    print(f"[GITHUB] {len(qualified_jobs)} jobs qualified out of {len(raw_jobs_list)} evaluated.")
+    print(f"[GITHUB] {len(qualified_jobs)} qualified out of {len(raw_jobs_list)}.")
     return qualified_jobs
