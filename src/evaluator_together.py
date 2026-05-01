@@ -1,24 +1,4 @@
-"""
-evaluator_together.py
-──────────────────────
-Stage-4 / Finals evaluator using Together AI.
 
-WHY TOGETHER AI + QWEN 2.5 72B HERE:
-  • Qwen2.5-72B-Instruct is one of the strongest open-source models for
-    structured reasoning and follows complex multi-rule prompts very precisely.
-  • Together AI offers $1 free credits on sign-up (enough for ~500 evaluations).
-  • Used as the final-pass high-confidence scorer for the top candidates that
-    multiple earlier evaluators agreed on (score ≥ 70 from ≥ 2 evaluators).
-  • Its output quality is close to GPT-4o on structured JSON tasks.
-
-SETUP:
-  pip install together
-  Add to .env:  TOGETHER_API_KEY=<your key from api.together.xyz>
-
-ALTERNATIVE MODEL:
-  "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo" — if Qwen quota runs out.
-  Change TOGETHER_MODEL below.
-"""
 
 import os
 import json

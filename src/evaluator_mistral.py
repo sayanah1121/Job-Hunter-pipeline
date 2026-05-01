@@ -1,21 +1,4 @@
-"""
-evaluator_mistral.py
-────────────────────
-Stage-3 evaluator using Mistral AI.
 
-WHY MISTRAL HERE:
-  • Mistral-Small-Latest is free on the Mistral free tier (1 req/s, 500k tokens/month).
-  • Mistral natively supports JSON mode (response_format={"type":"json_object"}) — no
-    post-processing needed.
-  • It handles long system prompts (the full candidate profile + rubric) cleanly and
-    produces tighter skill extractions than Llama 3.1 8B.
-  • Used as a cross-validator for borderline jobs (score 55–75 from Groq) before
-    they're promoted to the final Excel report.
-
-SETUP:
-  pip install mistralai
-  Add to .env:  MISTRAL_API_KEY=<your key from console.mistral.ai>
-"""
 
 import os
 import json
